@@ -5,109 +5,140 @@
 
 #include <iostream>
 
+/**
+ * @brief Parameters controlling the post-processing pipeline.
+ */
+struct PipelineParams {
+    float collision_radius;
+    int smooth_window;
+    int smooth_iterations;
+    float resample_step_raw;
+    float resample_step_smooth;
+};
 
+/**
+ * @brief Executes the complete planning and smoothing pipeline.
+ *
+ * The pipeline consists of:
+ *  1) Global path planning using A*
+ *  2) Path shortcutting
+ *  3) Uniform resampling
+ *  4) Path smoothing via moving average
+ *  5) Final uniform resampling
+ *
+ * @param vis Reference to the visualizer (provides map, start, goal).
+ * @param map_width Grid width.
+ * @param map_height Grid height.
+ * @param params Pipeline configuration parameters.
+ * @return Smoothed and resampled path in floating-point coordinates.
+ */
 std::vector<CoordF>
-runPipeline(
-    const std::vector<Coord>& raw_path,
-    const std::vector<Coord>& obstacles,
-    float robot_radius,
-    int densify_n,
-    int smooth_window,
-    int smooth_iterations,
-    float resample_step,
-    float resample_step_smooth
-) {
-    if (raw_path.size() < 2)
-        return {};
-
-    //  Path short-circuit
-    auto shortcut_path =
-        shortcutPath(raw_path, obstacles, robot_radius);
-
-    auto shortcutF = toCoordF(shortcut_path);
-
-    // Path resampling
-    auto denseF_path = resampleUniform(shortcutF, resample_step);
-
-    // Path smoothing by moving averages
-    auto smoothF_path =
-        movingAverageIterativeF(
-            denseF_path,
-            smooth_window,
-            smooth_iterations
-        );
-
-    // Uniform resampling of the path
-    return resampleUniform(smoothF_path, resample_step_smooth);
-}
-
-
-
-
-int main() {
-
-    constexpr int W = 40;
-    constexpr int H = 40;
-    constexpr int CELL_SZ = 20;
-    constexpr float ROBOT_RADIUS = 3.5f;
-    constexpr float DRONE_CELL_FACTOR = 2.f;
-
-    Visualizer vis(
-        W, H,
-        CELL_SZ,
-        ROBOT_RADIUS,
-        DRONE_CELL_FACTOR,
-        "../img/drone.png"
-    );
-
-    std::cout << "Clique para definir START, GOAL e obstáculos\n";
-    std::cout << "Pressione ENTER para iniciar\n";
-
-    while (true) {
-        int k = cv::waitKey(10);
-        if (k == 13) break;
-        if (k == 27) return 0;
-    }
-
-    // A* algorithm
-
+runPipeline(const Visualizer& vis,
+            int map_width,
+            int map_height,
+            const PipelineParams& params)
+{
+    // --- Global planning (A*) ---
     AStar planner(
         vis.get_obstacles(),
         vis.get_start(),
         vis.get_goal(),
-        W, H,
-        ROBOT_RADIUS
+        map_width,
+        map_height,
+        params.collision_radius
     );
 
-    while (!planner.goal_reached() &&
-           !planner.no_solution())
+    while (!planner.goal_reached() && !planner.no_solution())
         planner.step();
 
-    if (planner.no_solution()) {
-        std::cout << "Nenhum caminho encontrado\n";
+    if (planner.no_solution())
+        return {};
+
+    const auto raw_path = planner.path();
+    if (raw_path.size() < 2)
+        return {};
+
+    // --- Path shortcutting ---
+    const auto shortcut_path =
+        shortcutPath(raw_path,
+                     vis.get_obstacles(),
+                     params.collision_radius);
+
+    const auto shortcutF = toCoordF(shortcut_path);
+
+    // --- Densification ---
+    const auto denseF =
+        resampleUniform(shortcutF,
+                        params.resample_step_raw);
+
+    // --- Smoothing ---
+    const auto smoothF =
+        movingAverageIterativeF(
+            denseF,
+            params.smooth_window,
+            params.smooth_iterations
+        );
+
+    // --- Final resampling ---
+    return resampleUniform(
+        smoothF,
+        params.resample_step_smooth
+    );
+}
+
+int main()
+{
+    constexpr int MAP_W = 40;
+    constexpr int MAP_H = 40;
+    constexpr int CELL_SIZE = 20;
+    constexpr float COLLISION_RADIUS = 3.5f;
+    constexpr float DRONE_CELL_FACTOR = 2.0f;
+
+    // Visualization and environment setup 
+    Visualizer vis(
+        MAP_W,
+        MAP_H,
+        CELL_SIZE,
+        COLLISION_RADIUS,
+        DRONE_CELL_FACTOR,
+        "../img/drone.png"
+    );
+
+    std::cout << "Click to define START, GOAL and obstacles.\n";
+    std::cout << "Press ENTER to start planning.\n";
+    std::cout << "Press ESC to exit.\n";
+
+    // User input loop
+    while (true) {
+        int key = cv::waitKey(10);
+        if (key == 13)   // ENTER
+            break;
+        if (key == 27)   // ESC
+            return 0;
+    }
+
+    // Pipeline configuration
+    PipelineParams params {
+        .collision_radius = COLLISION_RADIUS,
+        .smooth_window = 10,
+        .smooth_iterations = 30,
+        .resample_step_raw = 0.1f,
+        .resample_step_smooth = 0.6f
+    };
+
+    // Run planning pipeline
+    const auto final_pathF =
+        runPipeline(vis, MAP_W, MAP_H, params);
+
+    if (final_pathF.empty()) {
+        std::cout << "No valid path found.\n";
         cv::waitKey(0);
         return 0;
     }
 
-    // ================= PIPELINE =================
-
-    const auto raw_path = planner.path();
-
-    const auto final_pathF = runPipeline(
-        raw_path,
-        vis.get_obstacles(),
-        ROBOT_RADIUS,
-        /* densify_n         */ 100,
-        /* smooth_window     */ 10,
-        /* smooth_iterations */ 30,
-        /* resample_step_shortcut     */ 0.1f,
-        /* resample_step_smooth     */ 0.6f
-    );
-
     const auto pose_path = toPosePath(final_pathF);
 
-    // ANIMATION
-
+    // Animation
     for (size_t i = 0; i < pose_path.size(); ++i) {
         vis.draw_environment();
         vis.draw_path(final_pathF);
@@ -117,10 +148,8 @@ int main() {
             pose_path[i].theta
         );
 
-        if (i + 1 < pose_path.size()) {
-            if (cv::waitKey(50) == 27)
-                break;
-        }
+        if (cv::waitKey(50) == 27) // ESC
+            break;
     }
 
     cv::waitKey(0);
