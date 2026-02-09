@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository implements a grid-based algorithm (i.e. **A***) as well as a simple simulation pipeline for navigation. The code can be extended for real-world deployment, once provided with a proper perception and SLAM modules.  
+This repository implements a grid-based algorithm (i.e. **A***) as well as a simple simulation pipeline for navigation. The code can be extended for real-world deployment, once provided with a proper perception and SLAM modules.
 
 ---
 
@@ -21,9 +21,9 @@ This repository implements a grid-based algorithm (i.e. **A***) as well as a sim
 ## 1. A* Path Planning
 
 ### Advantages
-- Guarantees the shortest path in a discretized grid when the heuristic is admissible.
+- Guarantees the shortest path in a discretized grid when the environment is fully known.
 - Simple to implement and understand.
-- Works well for static maps with known obstacles.
+- Works well for static maps in indoor environments.
 
 ### Limitations
 - Computational cost increases rapidly with grid size.
@@ -35,48 +35,49 @@ This repository implements a grid-based algorithm (i.e. **A***) as well as a sim
 
 ## 2. Evolution to Real Drone Deployment
 
-To deploy on a real drone, several additional components are required:
+Deploying on a real drone requires several additional components:
 
 1. **SLAM (Simultaneous Localization and Mapping)**  
-   - Provides a **metric map** and estimates the drone's pose in real-time.
-   - Replaces the simulated occupancy grid used in offline planning.
+   - Provides a **metric map** and estimates the drone's pose in real-time. For vision-based SLAM, ORB-SLAM could be used as an example.
 
 2. **Control Layer**  
-   - Converts planned trajectories into motor commands.  
-   - Common approaches:  
-     - **PID** controllers for basic stabilization and waypoint following.  
-     - **MPC (Model Predictive Control)** for trajectory tracking under constraints.
+   - Converts planned trajectories into motor commands. A proportional controller may suffice for static scenarios, while MPC could be required for dynamic environments with moving obstacles.
 
-The pipeline becomes: **SLAM → Planner (A*, RRT, etc.) → Trajectory smoothing → Controller (PID/MPC)**.
+Using local descriptors, the robot can localize itself in the map, plan its trajectory (e.g., for exploration or waypoint following), and then execute the plan via the control layer.
+
 
 ---
 
 ## 3. Vision Pipeline on Jetson Orin
 
-- **GPU acceleration** is leveraged for real-time perception.  
-- **CUDA** enables fast image pre-processing and computations.  
-- **TensorRT** or **DeepStream SDK** can optimize neural network inference for object detection, semantic segmentation, or depth estimation.  
-- Pipeline example:
+For a drone equipped with an embedded Jetson Orin, OpenCV is commonly used as the framework for many vision-based SLAM systems. By enabling CUDA support in OpenCV, image preprocessing, feature extraction, and descriptor matching can be performed efficiently on the GPU.
 
-- Real-time constraints require careful memory management and batch processing to sustain high frame rates.
+The output of these vision algorithms is typically a set of 3D or 2D points representing obstacles and landmarks. To use these points for navigation:
+
+- **Occupancy Map Creation**: Each detected point can be expanded to a small occupied region (e.g., a square or circular area around the point) to account for the robot/drone size and sensor uncertainty.
+- **Grid Discretization**: The environment is discretized into a grid (or voxel grid in 3D). Each cell is marked as free or occupied based on the points projected into it.
+- **Map Updating**: As new frames are processed, the occupancy map can be updated incrementally, enabling real-time navigation in dynamic or unknown environments.
+
+This processed map can then be fed to planning algorithms (like A*) to generate collision-free trajectories, which are subsequently smoothed and sent to the control layer for execution.
+
 
 ---
 
 ## 4. GigE Vision Concepts
 
-For high-resolution cameras over Ethernet (GigE Vision):
 
 - **Jumbo Frames**  
-- Frames larger than the standard Ethernet MTU (usually 1500 bytes).  
-- Reduces overhead and increases throughput for large images.
+  - Ethernet packets larger than the standard MTU (~1500 bytes).  
+  - Reduce overhead and allow higher throughput for large images.
 
 - **MTU (Maximum Transmission Unit)**  
-- Defines the largest packet size allowed on the network.  
-- Proper MTU configuration avoids fragmentation and packet loss.
+  - The largest allowed packet size.  
+  - Proper configuration prevents fragmentation and dropped frames.
 
 - **Buffers**  
-- Multiple buffers allow the camera to store several frames in memory before the host reads them.  
-- Crucial for high frame rates, preventing dropped frames and ensuring smooth acquisition.
+  - The camera stores captured frames in multiple memory buffers before the host processes them.  
+  - Prevents frame loss when the host or network cannot keep up, ensuring the map retains more complete environmental data.
+
 
 ---
 
@@ -103,10 +104,10 @@ make
 Current pipeline demonstrations.  
 
 <p float="left">
-  <img src="img/1.gif" width="200" />
-  <img src="img/2.gif" width="200" />
-  <img src="img/3.gif" width="200" />
-  <img src="img/4.gif" width="200" />
+  <img src="img/1.gif" width="400" />
+  <img src="img/2.gif" width="400" />
+  <img src="img/3.gif" width="400" />
+  <img src="img/4.gif" width="400" />
 </p>
 
 ---
