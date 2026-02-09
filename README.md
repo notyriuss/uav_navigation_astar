@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository implements a grid-based algorithm (i.e. **A***) as well as a simple simulation pipeline for navigation. The code can be extended for real-world deployment, once provided with a proper perception and SLAM modules.
+This repository implements a grid-based algorithm (i.e., **A***) as well as a simple simulation pipeline for navigation. The code can be extended for real-world deployment, once provided with a proper perception, SLAM and control modules.
 
 ---
 
@@ -41,7 +41,7 @@ Deploying on a real drone requires several additional components:
    - Provides a **metric map** and estimates the drone's pose in real-time. For vision-based SLAM, ORB-SLAM could be used as an example.
 
 2. **Control Layer**  
-   - Converts planned trajectories into motor commands. A proportional controller may suffice for static scenarios, while MPC could be required for dynamic environments with moving obstacles.
+   - Converts planned trajectories into moving commands for the robot. A proportional controller may suffice for static scenarios, while MPC could be required for dynamic environments with moving obstacles. MPC could also be used to get a smooth path, if correctly implemented with a penalty function.
 
 Using local descriptors, the robot can localize itself in the map, plan its trajectory (e.g., for exploration or waypoint following), and then execute the plan via the control layer.
 
@@ -52,7 +52,7 @@ Using local descriptors, the robot can localize itself in the map, plan its traj
 
 For a drone equipped with an embedded Jetson Orin, OpenCV is commonly used as the framework for many vision-based SLAM systems. By enabling CUDA support in OpenCV, image preprocessing, feature extraction, and descriptor matching can be performed efficiently on the GPU.
 
-The output of these vision algorithms is typically a set of 3D or 2D points representing obstacles and landmarks. To use these points for navigation:
+The output of these vision algorithms is typically a set of points representing obstacles and landmarks. To use these points for navigation:
 
 - **Occupancy Map Creation**: Each detected point can be expanded to a small occupied region (e.g., a square or circular area around the point) to account for the robot/drone size and sensor uncertainty.
 - **Grid Discretization**: The environment is discretized into a grid (or voxel grid in 3D). Each cell is marked as free or occupied based on the points projected into it.
@@ -66,9 +66,10 @@ This processed map can then be fed to planning algorithms (like A*) to generate 
 ## 4. GigE Vision Concepts
 
 
-- **Jumbo Frames**  
-  - Ethernet packets larger than the standard MTU (~1500 bytes).  
-  - Reduce overhead and allow higher throughput for large images.
+- **Jumbo Frames**
+  - Ethernet frames with MTU larger than the standard 1500 bytes (typically ~9000 bytes), reducing the number of frames needed to transmit a full image.
+  - Lower protocol overhead and CPU load, enabling more stable throughput for large image streams.
+
 
 - **MTU (Maximum Transmission Unit)**  
   - The largest allowed packet size.  
@@ -100,8 +101,7 @@ make
 ---
 
 ## Demonstrations
-
-Current pipeline demonstrations.  
+ 
 
 <p float="left">
   <img src="img/1.gif" width="400" />
