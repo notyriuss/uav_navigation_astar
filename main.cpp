@@ -38,7 +38,7 @@ runPipeline(const Visualizer& vis,
             int map_height,
             const PipelineParams& params)
 {
-    // --- Global planning (A*) ---
+    //  Global planning (A*) 
     AStar planner(
         vis.get_obstacles(),
         vis.get_start(),
@@ -58,7 +58,7 @@ runPipeline(const Visualizer& vis,
     if (raw_path.size() < 2)
         return {};
 
-    // --- Path shortcutting ---
+    //  Path shortcutting 
     const auto shortcut_path =
         shortcutPath(raw_path,
                      vis.get_obstacles(),
@@ -66,12 +66,12 @@ runPipeline(const Visualizer& vis,
 
     const auto shortcutF = toCoordF(shortcut_path);
 
-    // --- Densification ---
+    //  Densification 
     const auto denseF =
         resampleUniform(shortcutF,
                         params.resample_step_raw);
 
-    // --- Smoothing ---
+    //  Smoothing 
     const auto smoothF =
         movingAverageIterativeF(
             denseF,
@@ -79,7 +79,7 @@ runPipeline(const Visualizer& vis,
             params.smooth_iterations
         );
 
-    // --- Final resampling ---
+    // Final resampling
     return resampleUniform(
         smoothF,
         params.resample_step_smooth
@@ -88,10 +88,14 @@ runPipeline(const Visualizer& vis,
 
 int main()
 {
+    // Map width
     constexpr int MAP_W = 40;
+    // Map height
     constexpr int MAP_H = 40;
     constexpr int CELL_SIZE = 20;
+    // Collision radius considers both robot radius, obstacle radius and security margin
     constexpr float COLLISION_RADIUS = 3.5f;
+    // Robot size in comparison with the map cell
     constexpr float DRONE_CELL_FACTOR = 2.0f;
 
     // Visualization and environment setup 
